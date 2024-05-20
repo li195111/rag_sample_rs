@@ -1,0 +1,17 @@
+[package]
+name = "rag_sample_rs"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+actix-web = "4.5.1"
+chrono = "0.4.38"
+"faiss" = "0.11.0"
+futures = "0.3.30"
+langchain-rust = { version = "4.1.1", features = ["qdrant"] }
+serde_json = "1.0.117"
+tokio = "1.37.0"
+qctimer_macros = { path = "../qctimer_macros" }
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "1.0", features = ["full"] }
