@@ -2,7 +2,7 @@ use futures::{stream::StreamExt, Stream};
 
 use langchain_rust::{
     chain::{Chain, ConversationalRetrieverChain, ConversationalRetrieverChainBuilder},
-    document_loaders::{Loader, LoaderError, TextLoader},
+    document_loaders::{lo_loader::LoPdfLoader, Loader, LoaderError, TextLoader},
     embedding::ollama::ollama_embedder::OllamaEmbedder,
     fmt_message, fmt_template,
     llm::{openai::OpenAI, OpenAIConfig},
@@ -10,8 +10,7 @@ use langchain_rust::{
     message_formatter,
     prompt::HumanMessagePromptTemplate,
     prompt_args,
-    schemas::Document,
-    schemas::Message,
+    schemas::{Document, Message},
     template_jinja2,
     text_splitter::TokenSplitter,
     vectorstore::{
@@ -105,12 +104,31 @@ async fn load_doc(path: &str, splitter: TokenSplitter) -> Result<Document, Loade
 }
 
 #[async_timer]
-async fn chat_stream(msg: &str, chain: ConversationalRetrieverChain) {
+async fn load_pdf(path: &str, splitter: TokenSplitter) -> Vec<Document>{
+    let loader = LoPdfLoader::from_path(path).expect("Failed to load pdf");
+    let docs = loader
+    .load_and_split(splitter)
+    .await
+    .unwrap()
+    .map(|d| d.unwrap())
+    .collect::<Vec<_>>()
+    .await;
+
+    docs
+}
+
+#[async_timer]
+async fn chat_stream(msg: &str, chain: &ConversationalRetrieverChain) {
+    println!();
+
+    println!("You > {}", msg);
+
     let input_variables = prompt_args! {
         "question" => msg,
     };
 
     //If you want to stream
+    print!("Bot > ");
     let mut stream = chain.stream(input_variables).await.unwrap();
     while let Some(result) = stream.next().await {
         match result {
@@ -126,11 +144,12 @@ async fn chat_stream(msg: &str, chain: ConversationalRetrieverChain) {
 
 #[tokio::main]
 async fn main() {
-    let msg: &str = "酷喬伊科技設立時間？";
     let model = Model::Ollama;
     let vec_db = VectorDB::Qdrant;
     let collection_name = "langchain-rs";
     let path = "./src/documents/test_data/test_document.txt";
+    // let pdf_path = "./src/documents/test_data/Standards-of-Income_112.pdf";
+    let pdf_path = "./src/documents/test_data/國泰證券月對帳單.pdf";
 
     let llm = setup(model.clone()).await.unwrap();
 
@@ -155,10 +174,13 @@ async fn main() {
         .unwrap();
 
     let splitter: TokenSplitter = TokenSplitter::default();
-    let doc = load_doc(path, splitter).await.unwrap();
+    let doc: Document = load_doc(path, splitter.clone()).await.unwrap();
+    let mut docs: Vec<Document> = load_pdf(pdf_path, splitter.clone()).await;
+    println!("Document: {:?}", docs);
+    docs.push(doc);
 
     store
-        .add_documents(&vec![doc], &VecStoreOptions::default())
+        .add_documents(&docs, &VecStoreOptions::default())
         .await
         .unwrap();
 
@@ -166,11 +188,9 @@ async fn main() {
             fmt_message!(Message::new_system_message("You are a helpful assistant")),
             fmt_template!(HumanMessagePromptTemplate::new(
             template_jinja2!("Use the following pieces of context to answer the question at the end.
-            If you don't know the answer, just say that you don't know, don't try to make up an answer.
-            {{context}}
-            Question:{{question}}
-            Helpful Answer:", 
-            "context","question")))];
+            If you don't know the answer, just say that you don't know, don't try to make up an answer. 
+            Keep the answers clean, short and to the point.
+            {{context}} Question:{{question}} Answer:", "context","question")))];
 
     let chain = ConversationalRetrieverChainBuilder::new()
         .llm(llm)
@@ -192,5 +212,6 @@ async fn main() {
     //     println!("Result: {:?}", result);
     // }
 
-    chat_stream(msg, chain).await;
+    chat_stream("酷喬伊科技設立時間?", &chain).await;
+    chat_stream("淨收付金額是多少呢?", &chain).await;
 }
