@@ -86,33 +86,51 @@ async fn setup(model: Model) -> Result<OpenAI<OpenAIConfig>, String> {
     }
 }
 
-async fn load_doc(path: &str, splitter: TokenSplitter) -> Result<Document, LoaderError> {
-    let mut doc: Document = Document::default();
+#[async_timer]
+async fn load_doc(
+    path: &str,
+    splitter: Option<&TokenSplitter>,
+) -> Result<Vec<Document>, LoaderError> {
+    let mut documents = Vec::<Document>::new();
     match fs::read_to_string(path) {
         Ok(content) => {
             let loader = TextLoader::new(content.to_string());
-            let mut documents: Pin<Box<dyn Stream<Item = Result<Document, LoaderError>> + Send>> =
-                loader.load_and_split(splitter).await.unwrap();
-            while let Some(result_doc) = documents.next().await {
-                doc = result_doc.unwrap();
+            match splitter {
+                Some(splitter) => {
+                    documents = loader
+                        .load_and_split(splitter.clone())
+                        .await
+                        .unwrap()
+                        .map(|d| d.unwrap())
+                        .collect::<Vec<_>>()
+                        .await;
+                }
+                None => {
+                    documents = loader
+                        .load()
+                        .await
+                        .unwrap()
+                        .map(|d| d.unwrap())
+                        .collect::<Vec<_>>()
+                        .await
+                }
             }
-
-            Ok(doc)
+            Ok(documents)
         }
         Err(e) => Err(LoaderError::IOError(e)),
     }
 }
 
 #[async_timer]
-async fn load_pdf(path: &str, splitter: TokenSplitter) -> Vec<Document>{
+async fn load_pdf(path: &str, splitter: TokenSplitter) -> Vec<Document> {
     let loader = LoPdfLoader::from_path(path).expect("Failed to load pdf");
     let docs = loader
-    .load_and_split(splitter)
-    .await
-    .unwrap()
-    .map(|d| d.unwrap())
-    .collect::<Vec<_>>()
-    .await;
+        .load_and_split(splitter)
+        .await
+        .unwrap()
+        .map(|d| d.unwrap())
+        .collect::<Vec<_>>()
+        .await;
 
     docs
 }
@@ -149,7 +167,17 @@ async fn main() {
     let collection_name = "langchain-rs";
     let path = "./src/documents/test_data/test_document.txt";
     // let pdf_path = "./src/documents/test_data/Standards-of-Income_112.pdf";
-    let pdf_path = "./src/documents/test_data/國泰證券月對帳單.pdf";
+    // let pdf_path = "./src/documents/test_data/國泰證券月對帳單.pdf";
+    let pdf_path =
+        "./src/documents/test_data/112年度營利事業各業擴大書審純益率、所得額及同業利潤標準.json";
+    // let splitter: TokenSplitter = TokenSplitter::default();
+    let mut docs: Vec<Document> = Vec::<Document>::new();
+    let docs_1: Vec<Document> = load_doc(path, None).await.unwrap();
+    docs.extend(docs_1);
+    let docs_2: Vec<Document> = load_doc(&pdf_path, None).await.unwrap();
+    docs.extend(docs_2);
+    // let mut docs: Vec<Document> = load_pdf(pdf_path, splitter.clone()).await;
+    // println!("Number of Document: {:?}", docs.len());
 
     let llm = setup(model.clone()).await.unwrap();
 
@@ -172,12 +200,6 @@ async fn main() {
         .build()
         .await
         .unwrap();
-
-    let splitter: TokenSplitter = TokenSplitter::default();
-    let doc: Document = load_doc(path, splitter.clone()).await.unwrap();
-    let mut docs: Vec<Document> = load_pdf(pdf_path, splitter.clone()).await;
-    println!("Document: {:?}", docs);
-    docs.push(doc);
 
     store
         .add_documents(&docs, &VecStoreOptions::default())
@@ -212,6 +234,10 @@ async fn main() {
     //     println!("Result: {:?}", result);
     // }
 
-    chat_stream("酷喬伊科技設立時間?", &chain).await;
-    chat_stream("淨收付金額是多少呢?", &chain).await;
+    // chat_stream("酷喬伊科技設立時間?", &chain).await;
+    chat_stream(
+        "給我name='未分類其他紡織品製造',的'code'與'pure_profit_rate'的值",
+        &chain,
+    )
+    .await;
 }
