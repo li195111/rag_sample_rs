@@ -1,0 +1,45 @@
+{
+    "name": "query",
+    "description": "The query that user want to asked",
+    "parameters": {
+        "type": "object",
+        "properties": [
+            {
+                "code": {
+                    "description": "The code of query that user want to asked"
+                }
+            },
+            {
+                "name": {
+                    "description": "The name of query that user want to asked"
+                }
+            },
+            {
+                "pure_profit_rate": {
+                    "description": "The pure profit rate of query that user want to asked"
+                }
+            },
+            {
+                "income_standard": {
+                    "description": "The income standard of query that user want to asked"
+                }
+            },
+            {
+                "profit_rate": {
+                    "description": "The profit rate of query that user want to asked"
+                }
+            },
+            {
+                "cost_rate": {
+                    "description": "The cost rate of query that user want to asked"
+                }
+            },
+            {
+                "net_profit_rate": {
+                    "description": "The net profit rate of query that user want to asked"
+                }
+            }
+        ]
+    },
+    "required": []
+}
